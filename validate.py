@@ -18,7 +18,8 @@ from copy import deepcopy
 from dataset_paths import DATASET_PATHS
 import random
 import shutil
-from scipy.ndimage.filters import gaussian_filter
+from datetime import datetime
+from scipy.ndimage import gaussian_filter
 
 SEED = 0
 def set_seed():
@@ -137,7 +138,7 @@ def validate(model, loader, find_thres=False):
 
 
 
-def recursively_read(rootdir, must_contain, exts=["png", "jpg", "JPEG", "jpeg", "bmp"]):
+def recursively_read(rootdir, must_contain, exts=["png", "PNG", "jpg", "JPEG", "jpeg", "bmp"]):
     out = [] 
     for r, d, f in os.walk(rootdir):
         for file in f:
@@ -168,7 +169,7 @@ class RealFakeDataset(Dataset):
                         jpeg_quality=None,
                         gaussian_sigma=None):
 
-        assert data_mode in ["wang2020", "ours"]
+        assert data_mode in ["wang2020", "ours", "genimage"]
         self.jpeg_quality = jpeg_quality
         self.gaussian_sigma = gaussian_sigma
         
@@ -221,7 +222,7 @@ class RealFakeDataset(Dataset):
             real_list = real_list[0:max_sample]
             fake_list = fake_list[0:max_sample]
 
-        assert len(real_list) == len(fake_list)  
+        assert len(real_list) == len(fake_list), f"Real list count: {len(real_list)}, Fake list count: {len(fake_list)}, Real path: {real_path}, Fake path: {fake_path}"  
 
         return real_list, fake_list
 
@@ -256,7 +257,7 @@ if __name__ == '__main__':
     parser.add_argument('--real_path', type=str, default=None, help='dir name or a pickle')
     parser.add_argument('--fake_path', type=str, default=None, help='dir name or a pickle')
     parser.add_argument('--data_mode', type=str, default=None, help='wang2020 or ours')
-    parser.add_argument('--max_sample', type=int, default=1000, help='only check this number of images for both fake/real')
+    parser.add_argument('--max_sample', type=int, default=None, help='only check this number of images for both fake/real')
 
     parser.add_argument('--arch', type=str, default='res50')
     parser.add_argument('--ckpt', type=str, default='./pretrained_weights/fc_weights.pth')
@@ -271,13 +272,17 @@ if __name__ == '__main__':
     opt = parser.parse_args()
 
     
-    if os.path.exists(opt.result_folder):
-        shutil.rmtree(opt.result_folder)
-    os.makedirs(opt.result_folder)
+    # if os.path.exists(opt.result_folder):
+    #     shutil.rmtree(opt.result_folder)
+    # os.makedirs(opt.result_folder, exist_ok=True)
 
     model = get_model(opt.arch)
-    state_dict = torch.load(opt.ckpt, map_location='cpu')
-    model.fc.load_state_dict(state_dict)
+    state_dict = torch.load(opt.ckpt, map_location='cpu', weights_only=True)
+    new_dict = {}
+    for k in state_dict['model'].keys():
+        if k in ['fc.weight', 'fc.bias']:
+            new_dict[k.split('.')[1]] = state_dict['model'][k]
+    model.fc.load_state_dict(new_dict)
     print ("Model loaded..")
     model.eval()
     model.cuda()
@@ -287,7 +292,10 @@ if __name__ == '__main__':
     else:
         dataset_paths = [ dict(real_path=opt.real_path, fake_path=opt.fake_path, data_mode=opt.data_mode) ]
 
-
+    tot1 = np.array([0, 0, 0, 0], dtype=float)
+    tot2 = np.array([0, 0, 0, 0], dtype=float)
+    model_name = opt.ckpt.split(os.sep)[-2]
+    rows = [['Model', 'AP / Acc / R_Acc / F_Acc'], [model_name+'_0.5thresh', tot1], [model_name+'_bestthresh', tot2]]
 
     for dataset_path in (dataset_paths):
         set_seed()
@@ -301,12 +309,40 @@ if __name__ == '__main__':
                                     gaussian_sigma=opt.gaussian_sigma,
                                     )
 
+        # print(len(dataset), dataset_path)
+
         loader = torch.utils.data.DataLoader(dataset, batch_size=opt.batch_size, shuffle=False, num_workers=4)
         ap, r_acc0, f_acc0, acc0, r_acc1, f_acc1, acc1, best_thres = validate(model, loader, find_thres=True)
 
-        with open( os.path.join(opt.result_folder,'ap.txt'), 'a') as f:
-            f.write(dataset_path['key']+': ' + str(round(ap*100, 2))+'\n' )
+        temp1 = np.array([ap, acc0, r_acc0, f_acc0])
+        temp2 = np.array([ap, acc1, r_acc1, f_acc1])
+        tot1 += temp1
+        tot2 += temp2
+        temp1 = temp1.round(2)
+        temp2 = temp2.round(2)
+        rows[0].append(dataset_path['key'])
+        rows[1].append(tuple(temp1))
+        rows[2].append(tuple(temp2))
+        print("({} 0.5  thresh) ap: {}, acc: {}, r_acc: {}, f_acc: {}".format(dataset_path['key'], temp1[0], temp1[1], temp1[2], temp1[3]))
+        print("({} best thresh) ap: {}, acc: {}, r_acc: {}, f_acc: {}".format(dataset_path['key'], temp2[0], temp2[1], temp2[2], temp2[3]))
 
-        with open( os.path.join(opt.result_folder,'acc0.txt'), 'a') as f:
-            f.write(dataset_path['key']+': ' + str(round(r_acc0*100, 2))+'  '+str(round(f_acc0*100, 2))+'  '+str(round(acc0*100, 2))+'\n' )
+    tot1 /= len(dataset_paths)
+    tot2 /= len(dataset_paths)
+    rows[1][1] = tuple(tot1.round(2))
+    rows[2][1] = tuple(tot2.round(2))
+    rows[0].append('Time')
+    rows[1].append(datetime.now().strftime('%d %b %Y, %I:%M%p'))
+    rows[2].append(datetime.now().strftime('%d %b %Y, %I:%M%p'))
+
+    csv_name = 'RESULTS_GENIMAGE.csv'
+    if os.path.exists(csv_name): rows = rows[1:]
+    with open(csv_name, 'a') as f:
+        csv_writer = csv.writer(f, delimiter=',')
+        csv_writer.writerows(rows)
+
+        # with open( os.path.join(opt.result_folder,'ap.txt'), 'a') as f:
+        #     f.write(dataset_path['key']+': ' + str(round(ap*100, 2))+'\n' )
+
+        # with open( os.path.join(opt.result_folder,'acc0.txt'), 'a') as f:
+        #     f.write(dataset_path['key']+': ' + str(round(r_acc0*100, 2))+'  '+str(round(f_acc0*100, 2))+'  '+str(round(acc0*100, 2))+'\n' )
 
