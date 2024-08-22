@@ -30,7 +30,7 @@ STD = {
 
 
 
-def recursively_read(rootdir, must_contain, exts=["png", "jpg", "JPEG", "jpeg"]):
+def recursively_read(rootdir, must_contain, exts=["png", "PNG", "jpg", "JPEG", "jpeg"]):
     out = [] 
     for r, d, f in os.walk(rootdir):
         for file in f:
@@ -54,7 +54,7 @@ def get_list(path, must_contain=''):
 class RealFakeDataset(Dataset):
     def __init__(self, opt):
         assert opt.data_label in ["train", "val"]
-        #assert opt.data_mode in ["ours", "wang2020", "ours_wang2020"]
+        # assert opt.data_mode in ["ours", "wang2020", "ours_wang2020"]
         self.data_label  = opt.data_label
         if opt.data_mode == 'ours':
             pickle_name = "train.pickle" if opt.data_label=="train" else "val.pickle"
@@ -71,6 +71,9 @@ class RealFakeDataset(Dataset):
             temp = 'train/progan' if opt.data_label == 'train' else 'test/progan'
             real_list += get_list( os.path.join(opt.wang2020_data_path,temp), must_contain='0_real' )
             fake_list += get_list( os.path.join(opt.wang2020_data_path,temp), must_contain='1_fake' )
+        elif opt.data_mode == 'genimage':
+            real_list = recursively_read( '/mnt/LIVELAB_NAS/Detecting-AI-Generated-Images/GenImage/dataset/sdv4/train/nature', must_contain='')
+            fake_list = recursively_read( '/mnt/LIVELAB_NAS/Detecting-AI-Generated-Images/GenImage/dataset/sdv4/train/ai' , must_contain='')
 
 
 
