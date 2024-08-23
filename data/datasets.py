@@ -40,12 +40,15 @@ def recursively_read(rootdir, must_contain, exts=["png", "PNG", "jpg", "JPEG", "
 
 
 def get_list(path, must_contain=''):
-    if ".pickle" in path:
+    if ".pickle" in path and os.path.exists(path):
         with open(path, 'rb') as f:
             image_list = pickle.load(f)
         image_list = [ item for item in image_list if must_contain in item   ]
     else:
-        image_list = recursively_read(path, must_contain)
+        dir = os.path.dirname(path)
+        image_list = recursively_read(dir, must_contain)
+        assert len(image_list), "Empty image list"
+        with open(path, 'wb') as f: pickle.dump(image_list, f)
     return image_list
 
 
@@ -62,8 +65,8 @@ class RealFakeDataset(Dataset):
             fake_list = get_list( os.path.join(opt.fake_list_path, pickle_name) )
         elif opt.data_mode == 'wang2020':
             temp = 'train/progan' if opt.data_label == 'train' else 'test/progan'
-            real_list = get_list( os.path.join(opt.wang2020_data_path,temp), must_contain='0_real' )
-            fake_list = get_list( os.path.join(opt.wang2020_data_path,temp), must_contain='1_fake' )
+            real_list = get_list( os.path.join(opt.wang2020_data_path,temp), must_contain='0_real')
+            fake_list = get_list( os.path.join(opt.wang2020_data_path,temp), must_contain='1_fake')
         elif opt.data_mode == 'ours_wang2020':
             pickle_name = "train.pickle" if opt.data_label=="train" else "val.pickle"
             real_list = get_list( os.path.join(opt.real_list_path, pickle_name) )
@@ -74,7 +77,9 @@ class RealFakeDataset(Dataset):
         elif opt.data_mode == 'genimage':
             real_list = recursively_read( '/mnt/LIVELAB_NAS/Detecting-AI-Generated-Images/GenImage/dataset/sdv4/train/nature', must_contain='')
             fake_list = recursively_read( '/mnt/LIVELAB_NAS/Detecting-AI-Generated-Images/GenImage/dataset/sdv4/train/ai' , must_contain='')
-
+        elif opt.data_mode == 'univfd':
+            real_list = get_list( f'/mnt/LIVELAB_NAS/Detecting-AI-Generated-Images/UnivFD/dataset/{opt.data_label}/progan/{opt.data_label}_real.pickle', must_contain='0_real')
+            fake_list = get_list( f'/mnt/LIVELAB_NAS/Detecting-AI-Generated-Images/UnivFD/dataset/{opt.data_label}/progan/{opt.data_label}_fake.pickle', must_contain='1_fake')
 
 
         # setting the labels for the dataset

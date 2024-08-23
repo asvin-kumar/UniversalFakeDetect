@@ -44,7 +44,8 @@ if __name__ == '__main__':
         
     early_stopping = EarlyStopping(patience=opt.earlystop_epoch, delta=-0.001, verbose=True)
     start_time = time.time()
-    print ("Length of data loader: %d" %(len(data_loader)))
+    print ("Length of train data loader: %d" %(len(data_loader)))
+    print ("Length of val data loader: %d" %(len(val_loader)))
     for epoch in range(opt.niter):
         
         for i, data in enumerate(data_loader):

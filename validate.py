@@ -334,7 +334,7 @@ if __name__ == '__main__':
     rows[1].append(datetime.now().strftime('%d %b %Y, %I:%M%p'))
     rows[2].append(datetime.now().strftime('%d %b %Y, %I:%M%p'))
 
-    csv_name = 'RESULTS_GENIMAGE.csv'
+    csv_name = 'RESULTS_UNIVFD.csv'
     if os.path.exists(csv_name): rows = rows[1:]
     with open(csv_name, 'a') as f:
         csv_writer = csv.writer(f, delimiter=',')
