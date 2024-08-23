@@ -32,6 +32,7 @@ def get_val_opt():
 if __name__ == '__main__':
     opt = TrainOptions().parse()
     val_opt = get_val_opt()
+    val_opt.data_mode = opt.data_mode
  
     model = Trainer(opt)
     
