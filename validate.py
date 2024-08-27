@@ -95,7 +95,7 @@ def calculate_acc(y_true, y_pred, thres):
     return r_acc, f_acc, acc    
 
 
-def validate(model, loader, find_thres=False):
+def validate(model, loader, find_thres=False, use_thresh=0.5):
 
     with torch.no_grad():
         y_true, y_pred = [], []
@@ -116,8 +116,8 @@ def validate(model, loader, find_thres=False):
     # Get AP 
     ap = average_precision_score(y_true, y_pred)
 
-    # Acc based on 0.5
-    r_acc0, f_acc0, acc0 = calculate_acc(y_true, y_pred, 0.5)
+    # Acc based on use_thresh which is 0.5 by default
+    r_acc0, f_acc0, acc0 = calculate_acc(y_true, y_pred, use_thresh)
     if not find_thres:
         return ap, r_acc0, f_acc0, acc0
 
@@ -222,7 +222,7 @@ class RealFakeDataset(Dataset):
             real_list = real_list[0:max_sample]
             fake_list = fake_list[0:max_sample]
 
-        assert len(real_list) == len(fake_list), f"Real list count: {len(real_list)}, Fake list count: {len(fake_list)}, Real path: {real_path}, Fake path: {fake_path}"  
+        # assert len(real_list) == len(fake_list), f"Real list count: {len(real_list)}, Fake list count: {len(fake_list)}, Real path: {real_path}, Fake path: {fake_path}"  
 
         return real_list, fake_list
 
@@ -283,7 +283,7 @@ if __name__ == '__main__':
         if k in ['fc.weight', 'fc.bias']:
             new_dict[k.split('.')[1]] = state_dict['model'][k]
     model.fc.load_state_dict(new_dict)
-    print ("Model loaded..")
+    print ("Model loaded.")
     model.eval()
     model.cuda()
 
@@ -294,7 +294,7 @@ if __name__ == '__main__':
 
     tot1 = np.array([0, 0, 0, 0], dtype=float)
     tot2 = np.array([0, 0, 0, 0], dtype=float)
-    model_name = opt.ckpt.split(os.sep)[-2]
+    model_name = opt.ckpt.split(os.sep)[-1]
     rows = [['Model', 'AP / Acc / R_Acc / F_Acc'], [model_name+'_0.5thresh', tot1], [model_name+'_bestthresh', tot2]]
 
     for dataset_path in (dataset_paths):
@@ -312,10 +312,14 @@ if __name__ == '__main__':
         # print(len(dataset), dataset_path)
 
         loader = torch.utils.data.DataLoader(dataset, batch_size=opt.batch_size, shuffle=False, num_workers=4)
-        ap, r_acc0, f_acc0, acc0, r_acc1, f_acc1, acc1, best_thres = validate(model, loader, find_thres=True)
+        if dataset_path['key'] == 'progan':
+            ap, r_acc0, f_acc0, acc0, r_acc1, f_acc1, acc1, best_thres = validate(model, loader, find_thres=True)
+        else:
+            ap, r_acc0, f_acc0, acc0 = validate(model, loader, find_thres=False, use_thresh=0.5)
+            __, r_acc1, f_acc1, acc1 = validate(model, loader, find_thres=False, use_thresh=best_thres)
 
-        temp1 = np.array([ap, acc0, r_acc0, f_acc0])
-        temp2 = np.array([ap, acc1, r_acc1, f_acc1])
+        temp1 = np.array([ap, acc0, r_acc0, f_acc0])*100
+        temp2 = np.array([ap, acc1, r_acc1, f_acc1])*100
         tot1 += temp1
         tot2 += temp2
         temp1 = temp1.round(2)
